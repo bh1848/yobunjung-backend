@@ -1,0 +1,5 @@
+Flask
+Flask-SQLAlchemy
+mysqlclient
+opencv-python
+Flask-Migrate
