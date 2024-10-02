@@ -1,0 +1,7 @@
+# .gitattributes
+
+# 모든 텍스트 파일을 자동으로 처리 (운영체제에 맞게 LF/CRLF 변환)
+* text=auto
+
+# Python 파일은 항상 LF (Linux/Mac 스타일)로 유지
+*.py text eol=lf

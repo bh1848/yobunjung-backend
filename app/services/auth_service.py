@@ -1,6 +1,7 @@
 from flask_login import login_user, logout_user, current_user
 
 from app import db
+from app.models.recycle_log import RecycleLog
 from app.models.user import User
 
 
@@ -43,16 +44,30 @@ class AuthService:
         if User.query.filter_by(email=email).first():
             return {"message": "이미 사용 중인 이메일입니다."}, 400
 
-        # 닉네임 중복 확인
-        if User.query.filter_by(nickname=nickname).first():
-            return {"message": "이미 사용 중인 닉네임입니다."}, 400
-
         # 새 사용자 생성
         new_user = User(email=email, name=name, nickname=nickname)
         new_user.set_password(password)  # 비밀번호 설정
 
-        # 데이터베이스에 추가 및 저장
+        # 데이터베이스에 사용자 추가
         db.session.add(new_user)
         db.session.commit()
 
-        return {"message": "회원가입 성공", "user": {"email": new_user.email, "name": new_user.name, "nickname": new_user.nickname}}, 201
+        # 회원가입 후 추가 작업: 기본 재활용 로그 생성
+        recycle_log_paper = RecycleLog(user_id=new_user.id, bin_type='paper', recycle_count=0)
+        recycle_log_plastic = RecycleLog(user_id=new_user.id, bin_type='plastic', recycle_count=0)
+        recycle_log_can = RecycleLog(user_id=new_user.id, bin_type='can', recycle_count=0)
+
+        # 추가 데이터 저장
+        db.session.add(recycle_log_paper)
+        db.session.add(recycle_log_plastic)
+        db.session.add(recycle_log_can)
+        db.session.commit()
+
+        return {
+            "message": "회원가입 성공",
+            "user": {
+                "email": new_user.email,
+                "name": new_user.name,
+                "nickname": new_user.nickname
+            }
+        }, 201

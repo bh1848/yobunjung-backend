@@ -31,11 +31,11 @@ def create_app():
     from app.routes.auth_routes import auth_bp
     app.register_blueprint(auth_bp)
 
-    from app.routes.trash_routes import trash_bp
-    app.register_blueprint(trash_bp)
-
     from app.routes.trash_bin_routes import trash_bin_set_bp
     app.register_blueprint(trash_bin_set_bp)
+
+    from app.routes.user_routes import user_bp
+    app.register_blueprint(user_bp)
 
     return app
 
