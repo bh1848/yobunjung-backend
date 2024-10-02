@@ -1,16 +1,24 @@
-from flask import jsonify
-from app.services.trash_service import process_trash_image, validate_qr_code
+from flask import jsonify, request
+from app.services.trash_service import TrashService
+from flask_login import current_user
 
 
-def process_image(user, image):
-    """
-    사용자가 업로드한 이미지를 처리하고 쓰레기 인식을 통해 QR 코드 생성
-    """
-    return jsonify(process_trash_image(user, image))
+# 이미지 처리 요청
+def process_trash_image_controller():
+    image = request.files.get('image')
+    if not image:
+        return jsonify({"msg": "이미지가 제공되지 않았습니다."}), 400
+
+    response, status_code = TrashService.process_trash_image(current_user, image)
+    return jsonify(response), status_code
 
 
-def scan_qr(user, qr_code):
-    """
-    QR 코드 인식 후 쓰레기 처리가 완료되면 포인트를 지급
-    """
-    return jsonify(validate_qr_code(user, qr_code))
+# QR 코드 검증 요청
+def validate_qr_code_controller():
+    data = request.json
+    qr_code = data.get('qr_code')
+    if not qr_code:
+        return jsonify({"msg": "QR 코드가 제공되지 않았습니다."}), 400
+
+    response, status_code = TrashService.validate_qr_code(current_user, qr_code)
+    return jsonify(response), status_code

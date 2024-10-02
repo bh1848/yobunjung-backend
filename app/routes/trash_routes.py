@@ -1,19 +1,19 @@
-from flask import Blueprint, request, jsonify
-from app.controllers.trash_controller import process_image, scan_qr
+from flask import Blueprint
+from app.controllers.trash_controller import (
+    process_trash_image_controller,
+    validate_qr_code_controller
+)
 
 trash_bp = Blueprint('trash', __name__, url_prefix='/trash')
 
 
-# 이미지 업로드 및 쓰레기 처리
-@trash_bp.route('/upload', methods=['POST'])
-def upload_image():
-    user = request.user  # 로그인한 사용자 정보
-    image = request.files['image']  # 업로드된 이미지
-    return process_image(user, image)
+# 이미지 업로드 처리
+@trash_bp.route('/process_image', methods=['POST'])
+def process_trash_image_route():
+    return process_trash_image_controller()
 
-# QR 코드 스캔
-@trash_bp.route('/scan', methods=['POST'])
-def scan_qr_code():
-    user = request.user  # 로그인한 사용자 정보
-    qr_code = request.json.get('qr_code')
-    return scan_qr(user, qr_code)
+
+# QR 코드 검증
+@trash_bp.route('/validate_qr', methods=['POST'])
+def validate_qr_code_route():
+    return validate_qr_code_controller()
