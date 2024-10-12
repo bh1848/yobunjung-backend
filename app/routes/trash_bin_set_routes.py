@@ -1,6 +1,6 @@
 from flask import Blueprint
 
-from app.controllers.trash_bin_controller import (
+from app.controllers.trash_bin_set_controller import (
     update_status_controller,
     get_trash_bins_controller,
     create_trash_bin_set_controller, delete_trash_bin_set_controller

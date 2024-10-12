@@ -3,6 +3,7 @@ from app.models.recycle_log import RecycleLog
 from app.models.user import User
 from sqlalchemy import func
 
+
 def get_user_home_info(user_id):
     # 사용자 정보 조회
     user = User.query.get(user_id)
@@ -40,3 +41,16 @@ def get_user_home_info(user_id):
             for log in recent_recycles
         ]
     }, 200
+
+
+# 사용자 포인트 조회
+def get_user_points(user_id):
+    # 사용자 정보 조회
+    user = User.query.get(user_id)
+
+    if not user:
+        return {"msg": "사용자를 찾을 수 없습니다."}, 404
+
+    # 사용자 포인트 반환
+    return {"points": user.points}, 200
+
