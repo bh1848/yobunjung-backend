@@ -24,4 +24,4 @@ class PDFController:
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-        return jsonify({"question": item_name, "role": role, "answer": answer})
+        return jsonify({"question": item_name, "answer": answer})

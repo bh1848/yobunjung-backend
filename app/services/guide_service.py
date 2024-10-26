@@ -53,7 +53,7 @@ class GPTService:
                 {"role": "system", "content": "당신은 쓰레기 처리 전문가입니다."},
                 {"role": "user", "content": f"'{question}'의 재활용 방법을 알려주세요.\n\nPDF 내용:\n{context_text}"}
             ],
-            max_tokens=200,
+            max_tokens=600,
             temperature=0.5,
         )
         return response['choices'][0]['message']['content'].strip()
