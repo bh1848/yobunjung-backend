@@ -4,6 +4,7 @@ from flask_login import LoginManager
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 
+from app.services.guide_service import PDFService
 from config import Config
 
 # 초기화
@@ -19,6 +20,15 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+
+    # PDF 파일 경로를 Config에서 가져옴 (예: 'static/myfile.pdf')
+    pdf_path = app.config.get("PDF_PATH", "app/static/guide.pdf")
+
+    # PDF 파일 로드
+    try:
+        PDFService.load_pdf_to_cache(pdf_path)
+    except FileNotFoundError as e:
+        print(f"PDF 로드 실패: {e}")
 
     # 로그인되지 않은 경우 처리 (JSON 응답으로 처리)
     @login_manager.unauthorized_handler
