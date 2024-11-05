@@ -2,9 +2,8 @@ from app import db
 from app.models.trash_bin import TrashBin
 from app.models.trash_bin_set import TrashBinSet
 
-
-VALID_TRASH_BIN_TYPES = ["paper", "plastic", "can"]
-
+# 유효한 쓰레기 유형
+VALID_TRASH_TYPES = ["paper", "plastic", "can"]
 
 # 모든 쓰레기통 조회
 def get_all_trash_bins():
@@ -17,7 +16,6 @@ def get_all_trash_bins():
         }
         for bin in bins
     ], 200
-
 
 # 쓰레기통 상태 업데이트
 def update_trash_bin_status(bin_id, status):
@@ -35,7 +33,6 @@ def update_trash_bin_status(bin_id, status):
 
     return {"msg": f"쓰레기통 {bin_id}의 상태가 '{status}'로 업데이트되었습니다."}, 200
 
-
 # 쓰레기통 세트 정보 조회
 def get_trash_bin_set(set_id):
     trash_bin_set = TrashBinSet.query.get(set_id)
@@ -50,11 +47,10 @@ def get_trash_bin_set(set_id):
         "longitude": trash_bin_set.longitude,
         "address": trash_bin_set.address,
         "bins": [
-            {"type": bin.type, "status": bin.status}
+            {"trash_type": bin.trash_type, "status": bin.status}  # 'trash_type'으로 수정
             for bin in trash_bin_set.bins
         ]
     }, 200
-
 
 # 새로운 쓰레기통 세트 생성
 def create_trash_bin_set(name, latitude, longitude, address):
@@ -63,15 +59,14 @@ def create_trash_bin_set(name, latitude, longitude, address):
     db.session.commit()
 
     # 세트에 속하는 쓰레기통 3개 추가
-    for bin_type in VALID_TRASH_BIN_TYPES:
-        new_bin = TrashBin(set_id=new_set.id, type=bin_type)
+    for trash_type in VALID_TRASH_TYPES:
+        new_bin = TrashBin(set_id=new_set.id, trash_type=trash_type)  # 'trash_type'으로 수정
         db.session.add(new_bin)
 
     db.session.commit()
 
     # 사전(dict)을 반환하고, 컨트롤러에서 jsonify로 변환
     return {"msg": "쓰레기통 세트 추가 성공", "set_id": new_set.id}, 201
-
 
 # 쓰레기통 삭제
 def delete_trash_bin_set(set_id):
