@@ -1,15 +1,16 @@
-import io
 import base64
+import io
 import random
+
 import cv2
-import qrcode
 import numpy as np
+import qrcode
 import serial
 
-from app.models.user import User
-from app.models.recycle_log import RecycleLog
-from app.models.yolo_model import model  # yolo_model.py의 model 사용
 from app import db
+from app.models.recycle_log import RecycleLog
+from app.models.user import User
+from app.models.yolo_model import model  # yolo_model.py의 model 사용
 
 # Arduino 설정
 arduino_port = '/dev/ttyACM0'

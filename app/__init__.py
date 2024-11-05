@@ -46,14 +46,17 @@ def create_app():
     from app.routes.user_route import user_bp
     from app.routes.recycle_route import recycle_bp
     from app.routes.guide_route import guide_bp
+    from app.routes.trash_bin_route import trash_bin_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(trash_bin_set_bp)
     app.register_blueprint(user_bp)
     app.register_blueprint(recycle_bp)
     app.register_blueprint(guide_bp)
+    app.register_blueprint(trash_bin_bp)
 
     return app
+
 
 @login_manager.user_loader
 def load_user(user_id):

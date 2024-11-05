@@ -29,7 +29,8 @@ def add_user_points_controller():
     data = request.get_json()
     user_id = data.get("user_id")
     trash_type = data.get("trash_type")
-    trash_boolean = data.get("trash_boolean")  # 쓰레기 투입 여부를 나타내는 boolean 값
+    trash_boolean = data.get("trash_boolean")
+    # 쓰레기 투입 여부를 나타내는 boolean 값
 
     # 필요한 데이터가 누락된 경우
     if not user_id or not trash_type or trash_boolean is None:
