@@ -21,24 +21,37 @@ except serial.SerialException:
     print("Arduino에 연결할 수 없습니다.")
 
 
-# 물체 분류 함수 (YOLO 모델 사용)
 def detect(image):
-    """YOLO 모델로 물체를 분류하고 해당 분류를 반환합니다."""
+    """ONNX 모델로 물체를 분류하고 해당 분류를 반환합니다."""
     try:
+        # 이미지를 numpy 배열로 읽어서 전처리
         image_np = np.frombuffer(image.read(), np.uint8)
         frame = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
-        results = model(frame)
+        input_image = cv2.resize(frame, (640, 640))
+        input_image = input_image.transpose(2, 0, 1)  # 채널 우선
+        input_image = input_image[np.newaxis, :, :, :].astype(np.float32) / 255.0
 
+        # ONNX 추론 실행
+        outputs = model.run(None, {'images': input_image})
+
+        # 결과 구조 확인
+        print("ONNX 모델 추론 결과 구조:", outputs)
+
+        # ONNX 모델 출력에서 클래스 확률을 추출
         classification = None
-        for _, row in results.pandas().xyxy[0].iterrows():
-            label = int(row['class'])
+        for prediction in outputs[0][0]:  # 첫 번째 예측 결과의 각 행을 반복
+            # 각 예측 행에서 클래스 확률 값들을 추출 (마지막 3개의 값이 클래스 확률이라고 가정)
+            class_probs = prediction[-3:]  # 클래스 확률 값 추출
+
+            # 클래스 확률 중 가장 높은 값의 인덱스를 클래스 레이블로 사용
+            label = int(np.argmax(class_probs))
             classification = {0: 'Can', 1: 'Plastic', 2: 'Paper'}.get(label, 'Unknown')
-            break
+            break  # 첫 번째 유효한 예측만 사용
+
         return classification
     except Exception as e:
         print(f"물체 분류 오류 발생: {e}")
         return None
-
 
 # QR 코드 생성
 def create_qr_code(classification, user_id):
