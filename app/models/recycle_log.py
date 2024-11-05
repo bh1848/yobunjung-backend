@@ -4,7 +4,7 @@ from app import db
 class RecycleLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    bin_type = db.Column(db.String(50), nullable=False)
+    trash_type = db.Column(db.String(50), nullable=False)
     recycle_count = db.Column(db.Integer, default=0)
     earned_points = db.Column(db.Integer, default=0)
     timestamp = db.Column(db.DateTime, default=db.func.now())
