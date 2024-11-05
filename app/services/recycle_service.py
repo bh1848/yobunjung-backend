@@ -1,14 +1,14 @@
 import io
 import base64
 import random
-
 import cv2
 import qrcode
 import numpy as np
 import serial
+
 from app.models.user import User
 from app.models.recycle_log import RecycleLog
-from app.models.yolo_model import model
+from app.models.yolo_model import model  # yolo_model.py의 model 사용
 from app import db
 
 # Arduino 설정
@@ -20,6 +20,7 @@ except serial.SerialException:
     arduino = None
     print("Arduino에 연결할 수 없습니다.")
 
+
 # 물체 분류 함수 (YOLO 모델 사용)
 def detect(image):
     """YOLO 모델로 물체를 분류하고 해당 분류를 반환합니다."""
@@ -27,8 +28,8 @@ def detect(image):
         image_np = np.frombuffer(image.read(), np.uint8)
         frame = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
         results = model(frame)
-        classification = None
 
+        classification = None
         for _, row in results.pandas().xyxy[0].iterrows():
             label = int(row['class'])
             classification = {0: 'Can', 1: 'Plastic', 2: 'Paper'}.get(label, 'Unknown')
@@ -37,6 +38,7 @@ def detect(image):
     except Exception as e:
         print(f"물체 분류 오류 발생: {e}")
         return None
+
 
 # QR 코드 생성
 def create_qr_code(classification, user_id):
@@ -48,6 +50,7 @@ def create_qr_code(classification, user_id):
     buffered = io.BytesIO()
     qr.save(buffered, format="JPEG")
     return f"data:image/jpeg;base64,{base64.b64encode(buffered.getvalue()).decode('utf-8')}"
+
 
 # 사용자 포인트 적립 및 로그 기록
 def update_user_points(user_id, bin_type, points=None):
@@ -69,6 +72,7 @@ def update_user_points(user_id, bin_type, points=None):
     db.session.commit()
     return points_to_add
 
+
 # 아두이노 신호 전송
 def send_bin_signal(bin_type):
     """분류에 따라 아두이노로 신호를 전송합니다."""
@@ -80,6 +84,7 @@ def send_bin_signal(bin_type):
             print("유효하지 않은 분류입니다.")
     else:
         print("Arduino에 연결할 수 없습니다.")
+
 
 # QR 데이터 파싱
 def process_qr_data(qr_data):
