@@ -19,11 +19,6 @@ def get_user_home_info(user_id):
 
     recycle_count_dict = {item.trash_type: item.total_recycles for item in recycle_counts}
 
-    # 각 품목별 기본값 설정
-    for trash_type in ["paper", "plastic", "can"]:
-        if trash_type not in recycle_count_dict:
-            recycle_count_dict[trash_type] = 0
-
     # 최근 재활용 내역 3개 조회 (시간, 품목, 얻은 포인트)
     recent_recycles = RecycleLog.query.filter_by(user_id=user_id).order_by(RecycleLog.timestamp.desc()).limit(3).all()
 
