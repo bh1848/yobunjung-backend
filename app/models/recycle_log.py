@@ -2,7 +2,6 @@ from datetime import datetime
 import pytz
 from app import db
 
-
 class RecycleLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -10,6 +9,7 @@ class RecycleLog(db.Model):
     recycle_count = db.Column(db.Integer, default=0)
     earned_points = db.Column(db.Integer, default=0)
     timestamp = db.Column(db.DateTime, default=db.func.now())  # UTC로 저장
+    is_successful = db.Column(db.Boolean, default=False)  # 쓰레기 투입 여부를 나타내는 boolean 필드
 
     @property
     def timestamp_kst(self):

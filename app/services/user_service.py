@@ -12,16 +12,16 @@ def get_user_home_info(user_id):
     if not user:
         return {"msg": "사용자를 찾을 수 없습니다."}, 404
 
-    # 품목별 재활용 횟수 조회
+    # 품목별 재활용 횟수 조회 (is_successful=True 조건 추가)
     recycle_counts = db.session.query(
         RecycleLog.trash_type,
         func.sum(RecycleLog.recycle_count).label('total_recycles')
-    ).filter_by(user_id=user_id).group_by(RecycleLog.trash_type).all()
+    ).filter_by(user_id=user_id, is_successful=True).group_by(RecycleLog.trash_type).all()
 
     recycle_count_dict = {item.trash_type: item.total_recycles for item in recycle_counts}
 
-    # 최근 재활용 내역 3개 조회 (시간, 품목, 얻은 포인트)
-    recent_recycles = RecycleLog.query.filter_by(user_id=user_id).order_by(RecycleLog.timestamp.desc()).limit(3).all()
+    # 최근 재활용 내역 3개 조회 (시간, 품목, 얻은 포인트) - is_successful=True 조건 추가
+    recent_recycles = RecycleLog.query.filter_by(user_id=user_id, is_successful=True).order_by(RecycleLog.timestamp.desc()).limit(3).all()
 
     # 사용자 정보, 포인트, 품목별 재활용 횟수, 최근 재활용 내역 반환
     return {
@@ -41,25 +41,24 @@ def get_user_home_info(user_id):
 
 # 재활용 내역
 def get_user_recycle_logs(user_id):
-
     # 사용자 정보 조회
     user = User.query.get(user_id)
 
     if not user:
         return {"msg": "사용자를 찾을 수 없습니다."}, 404
 
-    # 품목별 재활용 횟수 조회
+    # 품목별 재활용 횟수 조회 (is_successful=True 조건 추가)
     recycle_counts = db.session.query(
         RecycleLog.trash_type,
         func.sum(RecycleLog.recycle_count).label('total_recycles')
-    ).filter_by(user_id=user_id).group_by(RecycleLog.trash_type).all()
+    ).filter_by(user_id=user_id, is_successful=True).group_by(RecycleLog.trash_type).all()
 
     recycle_count_dict = {item.trash_type: item.total_recycles for item in recycle_counts}
 
-    # 최근 재활용 내역 3개 조회 (시간, 품목, 얻은 포인트)
-    recent_recycles = RecycleLog.query.filter_by(user_id=user_id).order_by(RecycleLog.timestamp.desc()).all()
+    # 전체 재활용 내역 조회 (is_successful=True 조건 추가)
+    recent_recycles = RecycleLog.query.filter_by(user_id=user_id, is_successful=True).order_by(RecycleLog.timestamp.desc()).all()
 
-    # 사용자 정보, 포인트, 품목별 재활용 횟수, 최근 재활용 내역 반환
+    # 사용자 정보, 포인트, 품목별 재활용 횟수, 전체 재활용 내역 반환
     return {
         "recycle_counts": recycle_count_dict,
         "recent_recycles": [

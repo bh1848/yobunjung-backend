@@ -7,6 +7,7 @@ import numpy as np
 import qrcode
 import serial
 from PIL import Image
+from sqlalchemy.exc import SQLAlchemyError
 
 from app import db
 from app.models.recycle_log import RecycleLog
@@ -66,9 +67,9 @@ def create_qr_code(trash_type, user_id, logo_path='app/static/logo.png', fill_co
         # QR 코드 데이터 설정
         qr_data = f"{user_id}:{trash_type}"
         qr = qrcode.QRCode(
-            version=1,
+            version=5,  # 데이터 밀도를 높이기 위해 QR 코드 크기 조정
             error_correction=qrcode.constants.ERROR_CORRECT_H,  # 높은 오류 보정률 사용
-            box_size=10,
+            box_size=4,  # 더 작은 점을 위해 박스 크기를 줄임
             border=4,
         )
         qr.add_data(qr_data)
@@ -79,11 +80,6 @@ def create_qr_code(trash_type, user_id, logo_path='app/static/logo.png', fill_co
 
         # 로고 이미지 로드 및 흰색 배경을 투명하게 설정
         logo = Image.open(logo_path).convert("RGBA")
-        datas = logo.getdata()
-
-        new_data = []
-
-        logo.putdata(new_data)
 
         # 로고 크기 조절
         logo_size = min(img.size) // 4  # QR 코드 크기의 1/4로 로고 크기 조정
@@ -103,22 +99,58 @@ def create_qr_code(trash_type, user_id, logo_path='app/static/logo.png', fill_co
         return {"error": f"QR 코드 생성 중 오류 발생: {str(e)}"}
 
 
-# 사용자 포인트 적립 및 로그 기록
-def update_user_points(user_id, trash_type, points=None):
-    """포인트를 적립하고 재활용 로그를 기록합니다."""
-    user = User.query.get(user_id)
-    if not user:
-        raise ValueError("사용자를 찾을 수 없습니다.")
+# 포인트 적립(true - 적립 성공, false - 적립 실패)
+def update_user_points(user_id, trash_type, trash_boolean, points=None):
+    """사용자 포인트를 적립하고 재활용 로그를 기록하는 서비스 함수"""
+    try:
+        # 사용자 조회
+        user = User.query.get(user_id)
+        if not user:
+            raise ValueError("사용자를 찾을 수 없습니다.")
 
-    points_to_add = points if points else random.randint(1, 15)
-    user.points += points_to_add
+        # 포인트 적립 여부 결정
+        points_to_add = points if points else random.randint(1, 15) if trash_boolean else 0
+        user.points += points_to_add if trash_boolean else 0
 
-    recycle_log = RecycleLog(
-        user_id=user.id,
-        trash_type=trash_type,
-        recycle_count=1,
-        earned_points=points_to_add
-    )
-    db.session.add(recycle_log)
-    db.session.commit()
-    return points_to_add
+        # 재활용 로그 생성 (is_successful 값 설정)
+        recycle_log = RecycleLog(
+            user_id=user.id,
+            trash_type=trash_type,
+            recycle_count=1,
+            earned_points=points_to_add,
+            is_successful=trash_boolean  # 쓰레기 투입 여부
+        )
+
+        # 데이터베이스에 추가 및 커밋
+        db.session.add(recycle_log)
+        db.session.commit()
+
+        # 성공 또는 실패 메시지 생성
+        if trash_boolean:
+            success_message = f"{points_to_add} 포인트가 적립되었습니다."
+        else:
+            success_message = "쓰레기가 투입되지 않아 포인트가 적립되지 않았습니다."
+
+        return points_to_add, success_message
+
+    except SQLAlchemyError as e:
+        db.session.rollback()  # 데이터베이스 오류 시 롤백
+        print(f"Database error: {e}")
+        raise
+
+
+# 쓰레기 투입됐는지 확인
+def get_latest_points_status(user_id):
+    """사용자의 최신 포인트 적립 상태를 조회하는 서비스 함수"""
+    # 가장 최근의 재활용 로그 조회
+    recycle_log = RecycleLog.query.filter_by(user_id=user_id).order_by(RecycleLog.id.desc()).first()
+
+    if recycle_log:
+        earned_points = recycle_log.earned_points
+        success = recycle_log.earned_points > 0
+        message = "포인트 적립 완료" if success else "쓰레기 투입 실패로 포인트 미적립"
+        return {"message": message, "earned_points": earned_points, "success": success}
+    else:
+        return {"message": "포인트 적립 기록 없음", "success": False}
+
+

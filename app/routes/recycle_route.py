@@ -2,10 +2,11 @@ from flask import Blueprint, request, jsonify
 from app.controllers.recycle_controller import (
     create_qr_controller,
     detect_controller,
-    add_user_points_controller
+    add_user_points_controller, check_points_status_controller
 )
 
 recycle_bp = Blueprint('recycle', __name__, url_prefix='/recycle')
+
 
 # qr생성
 @recycle_bp.route('/create_qr', methods=['POST'])
@@ -43,3 +44,9 @@ def detect():
 @recycle_bp.route('/add_points', methods=['POST'])
 def user_add_points():
     return add_user_points_controller()
+
+
+# 쓰레기 투입됐는지 확인
+@recycle_bp.route('/<int:user_id>/is_successful', methods=['GET'])
+def check_points_status(user_id):
+    return check_points_status_controller(user_id)

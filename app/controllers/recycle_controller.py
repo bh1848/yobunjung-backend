@@ -3,7 +3,7 @@ from flask import request, jsonify
 from app.services.recycle_service import (
     create_qr_code,
     detect,
-    update_user_points
+    update_user_points, get_latest_points_status
 )
 
 # qr 생성
@@ -25,25 +25,32 @@ def detect_controller(image):
 
 # 포인트 적립
 def add_user_points_controller():
-    """사용자의 포인트를 적립하고 결과를 반환하는 컨트롤러"""
+    """포인트 적립 요청을 처리하고 응답을 반환하는 컨트롤러"""
     data = request.get_json()
     user_id = data.get("user_id")
     trash_type = data.get("trash_type")
     trash_boolean = data.get("trash_boolean")
-    # 쓰레기 투입 여부를 나타내는 boolean 값
 
-    # 필요한 데이터가 누락된 경우
+    # 필수 데이터가 누락된 경우 에러 반환
     if not user_id or not trash_type or trash_boolean is None:
         return jsonify({"error": "user_id, trash_type, trash_boolean을 제공해야 합니다."}), 400
 
-    # 쓰레기가 실제로 투입된 경우에만 포인트 적립
-    if trash_boolean:
-        try:
-            points_added = update_user_points(user_id, trash_type)
-            return jsonify({"message": "포인트가 적립되었습니다.", "points_added": points_added}), 200
-        except ValueError as e:
-            return jsonify({"error": str(e)}), 404  # 사용자 없음
-        except Exception as e:
-            return jsonify({"error": "포인트 적립 중 오류 발생"}), 500  # 기타 오류
-    else:
-        return jsonify({"message": "쓰레기가 투입되지 않았습니다. 포인트가 적립되지 않았습니다."}), 200
+    try:
+        # 쓰레기 투입 여부가 참일 경우에만 포인트 적립 진행
+        points_added, success_message = update_user_points(user_id, trash_type, trash_boolean)
+        return jsonify({"message": success_message, "points_added": points_added}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404  # 사용자 없음
+    except Exception as e:
+        return jsonify({"error": "포인트 적립 중 오류 발생"}), 500  # 기타 오류
+
+
+# 쓰레기 투입됐는지 확인
+def check_points_status_controller(user_id):
+    """사용자의 최신 포인트 적립 상태를 조회하는 컨트롤러"""
+    if not user_id:
+        return jsonify({"error": "user_id를 제공해야 합니다."}), 400
+
+    # 서비스 계층에서 포인트 상태 조회
+    result = get_latest_points_status(user_id)
+    return jsonify(result), result.get("status_code", 200)
