@@ -1,6 +1,7 @@
 import os
 import openai
 import pdfplumber
+import re
 
 openai.api_key = "sk-he18d8Yo7oZDvNOMJpcV3XQccF6TbhE1JtLcgi4MkgT3BlbkFJfHtsYco8T_RY_OfJ-qo_zKZv_PxxVxnJreYRNP3-sA"
 
@@ -15,11 +16,7 @@ class PDFService:
         """
         if os.path.exists(pdf_path):
             with pdfplumber.open(pdf_path) as pdf:
-                text = ""
-                for page in pdf.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text
+                text = "".join(page.extract_text() or "" for page in pdf.pages)
             PDFService.pdf_text_cache = text.strip()  # 캐시에 텍스트 저장
         else:
             raise FileNotFoundError(f"PDF 파일을 찾을 수 없습니다: {pdf_path}")
@@ -34,6 +31,20 @@ class PDFService:
         else:
             raise ValueError("PDF 텍스트가 로드되지 않았습니다.")
 
+    @staticmethod
+    def extract_relevant_text(keyword, text, context_length=800):
+        """
+        PDF 텍스트에서 주어진 키워드와 관련된 텍스트 부분을 추출.
+        context_length: 키워드 주변에서 추출할 문자 수.
+        """
+        pattern = re.compile(rf"(.{{0,{context_length}}}{keyword}.{{0,{context_length}}})", re.IGNORECASE)
+        matches = pattern.findall(text)
+
+        if matches:
+            return "\n\n".join(matches)
+        else:
+            return None  # 관련 텍스트가 없는 경우
+
 
 class GPTService:
     @staticmethod
@@ -41,7 +52,6 @@ class GPTService:
         """
         GPT에게 질문이 사물인지 판별하도록 요청하고, 사람이름이나 추상 개념이 아닌지 확인.
         """
-        # GPT에게 질문을 통해 사물인지, 사람 이름인지, 추상 개념인지 판별
         prompt = (
             f"'{question}'는 물리적인 사물의 이름인가요? "
             "사람 이름이나 추상적인 개념이 아닌 경우에만 '예'로 답해주세요. "
@@ -67,25 +77,19 @@ class GPTService:
         """
         GPT에게 역할을 부여하고 질문에 대한 답변을 생성.
         """
+        prompt = f"'{question}'의 재활용 방법을 알려주세요."
         if context_text:
-            prompt = (
-                f"'{question}'의 재활용 방법을 알려주세요.\n\nPDF 내용:\n{context_text}"
-            )
-            messages = [
-                {"role": "system", "content": "당신은 쓰레기 처리 전문가입니다."},
-                {"role": "user", "content": prompt}
-            ]
-        else:
-            prompt = f"'{question}'의 재활용 방법을 알려주세요."
-            messages = [
-                {"role": "system", "content": "당신은 쓰레기 처리 전문가입니다."},
-                {"role": "user", "content": prompt}
-            ]
+            prompt += f"\n\nPDF 내용:\n{context_text}"
+
+        messages = [
+            {"role": "system", "content": f"당신은 {role}입니다."},
+            {"role": "user", "content": prompt}
+        ]
 
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=messages,
-            max_tokens=600,
+            max_tokens=1000,
             temperature=0.5,
         )
         return response['choices'][0]['message']['content'].strip()
@@ -105,12 +109,12 @@ class GPTService:
         except ValueError:
             return "PDF 내용을 로드하지 못했습니다."
 
-        # 2. 품목 이름을 기반으로 검색 후 조건별 응답
-        if question in pdf_text:
-            answer = GPTService.ask_gpt_with_role(question, pdf_text, role)
-        else:
-            # PDF에 정보가 없을 때 GPT가 자체적으로 답변 생성
-            answer = GPTService.ask_gpt_with_role(question, None, role)
+        # 2. 관련 텍스트 추출
+        relevant_text = PDFService.extract_relevant_text(question, pdf_text)
+        if not relevant_text:
+            return "해당 항목에 대한 정보를 PDF에서 찾을 수 없습니다."
+
+        # 3. 추출된 텍스트로 GPT에 질문
+        answer = GPTService.ask_gpt_with_role(question, relevant_text, role)
 
         return answer
-
