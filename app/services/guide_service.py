@@ -37,6 +37,32 @@ class PDFService:
 
 class GPTService:
     @staticmethod
+    def is_valid_item_name(question):
+        """
+        GPT에게 질문이 사물인지 판별하도록 요청하고, 사람이름이나 추상 개념이 아닌지 확인.
+        """
+        # GPT에게 질문을 통해 사물인지, 사람 이름인지, 추상 개념인지 판별
+        prompt = (
+            f"'{question}'는 물리적인 사물의 이름인가요? "
+            "사람 이름이나 추상적인 개념이 아닌 경우에만 '예'로 답해주세요. "
+            "예/아니요 형식으로만 답해주세요."
+        )
+
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "당신은 사물 이름을 판별하는 전문가입니다."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=5,
+            temperature=0.0,
+        )
+
+        # GPT의 응답을 확인하여 '예'인 경우에만 True를 반환
+        answer = response['choices'][0]['message']['content'].strip()
+        return answer.lower() == "예"
+
+    @staticmethod
     def ask_gpt_with_role(question, context_text=None, role="쓰레기 처리 전문가"):
         """
         GPT에게 역할을 부여하고 질문에 대한 답변을 생성.
@@ -57,7 +83,7 @@ class GPTService:
             ]
 
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # GPT-3.5 모델 호출
+            model="gpt-3.5-turbo",
             messages=messages,
             max_tokens=600,
             temperature=0.5,
@@ -69,6 +95,10 @@ class GPTService:
         """
         미리 저장된 PDF 텍스트를 기반으로 질문을 처리하고 답변 생성.
         """
+        # 사물 유효성 검사
+        if not GPTService.is_valid_item_name(question):
+            return "올바르지 않은 검색어입니다. 사물 이름을 입력해주세요."
+
         # 1. 캐시된 PDF 텍스트 가져오기
         try:
             pdf_text = PDFService.get_pdf_text()
@@ -83,3 +113,4 @@ class GPTService:
             answer = GPTService.ask_gpt_with_role(question, None, role)
 
         return answer
+
