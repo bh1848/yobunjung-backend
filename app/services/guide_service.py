@@ -1,9 +1,7 @@
 import os
-
 import openai
 import pdfplumber
 
-# OpenAI API 키를 하드코딩으로 설정 (보안 위험이 있을 수 있음)
 openai.api_key = "sk-he18d8Yo7oZDvNOMJpcV3XQccF6TbhE1JtLcgi4MkgT3BlbkFJfHtsYco8T_RY_OfJ-qo_zKZv_PxxVxnJreYRNP3-sA"
 
 
@@ -39,20 +37,28 @@ class PDFService:
 
 class GPTService:
     @staticmethod
-    def ask_gpt_with_role(question, context_text, role="쓰레기 처리 전문가"):
+    def ask_gpt_with_role(question, context_text=None, role="쓰레기 처리 전문가"):
         """
         GPT에게 역할을 부여하고 질문에 대한 답변을 생성.
         """
-        prompt = (
-            f"'{question}'의 재활용 방법을 알려주세요.\n\nPDF 내용:\n{context_text}"
-        )
+        if context_text:
+            prompt = (
+                f"'{question}'의 재활용 방법을 알려주세요.\n\nPDF 내용:\n{context_text}"
+            )
+            messages = [
+                {"role": "system", "content": "당신은 쓰레기 처리 전문가입니다."},
+                {"role": "user", "content": prompt}
+            ]
+        else:
+            prompt = f"'{question}'의 재활용 방법을 알려주세요."
+            messages = [
+                {"role": "system", "content": "당신은 쓰레기 처리 전문가입니다."},
+                {"role": "user", "content": prompt}
+            ]
 
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",  # GPT-3.5 모델 호출
-            messages=[
-                {"role": "system", "content": "당신은 쓰레기 처리 전문가입니다."},
-                {"role": "user", "content": f"'{question}'의 재활용 방법을 알려주세요.\n\nPDF 내용:\n{context_text}"}
-            ],
+            messages=messages,
             max_tokens=600,
             temperature=0.5,
         )
@@ -69,10 +75,11 @@ class GPTService:
         except ValueError:
             return "PDF 내용을 로드하지 못했습니다."
 
-        # 2. 품목 이름을 기반으로 검색
+        # 2. 품목 이름을 기반으로 검색 후 조건별 응답
         if question in pdf_text:
             answer = GPTService.ask_gpt_with_role(question, pdf_text, role)
         else:
-            answer = "해당 품목에 대한 정보가 없습니다."
+            # PDF에 정보가 없을 때 GPT가 자체적으로 답변 생성
+            answer = GPTService.ask_gpt_with_role(question, None, role)
 
         return answer
