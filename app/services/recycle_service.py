@@ -1,12 +1,14 @@
 import base64
 import io
 import random
+from datetime import datetime
 
 import cv2
 import numpy as np
 import qrcode
 import serial
 from PIL import Image
+from flask import request
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import db
@@ -55,6 +57,7 @@ def detect(image):
     except Exception as e:
         print(f"물체 분류 오류 발생: {e}")
         return None
+
 
 # QR 코드 생성
 def create_qr_code(trash_type, user_id, logo_path='app/static/logo.png', fill_color="#2795EF", back_color="white"):
@@ -142,15 +145,35 @@ def update_user_points(user_id, trash_type, trash_boolean, points=None):
 # 쓰레기 투입됐는지 확인
 def get_latest_points_status(user_id):
     """사용자의 최신 포인트 적립 상태를 조회하는 서비스 함수"""
-    # 가장 최근의 재활용 로그 조회
-    recycle_log = RecycleLog.query.filter_by(user_id=user_id).order_by(RecycleLog.id.desc()).first()
+    # 사용자 조회
+    user = User.query.get(user_id)
+    if not user:
+        return {"message": "사용자를 찾을 수 없습니다.", "success": False}
 
+    # 가장 최근의 재활용 로그 조회
+    recycle_log = RecycleLog.query.filter_by(user_id=user_id).order_by(RecycleLog.timestamp.desc()).first()
+
+    # 변동이 없는 경우: last_checked_at이 최신 로그의 timestamp보다 이후인 경우
+    if user.last_checked_at and recycle_log and user.last_checked_at >= recycle_log.timestamp:
+        return {"message": "아직 쓰레기 투입 안됨"}
+
+    # 변동이 있는 경우, 최신 재활용 로그 정보 반환 및 last_checked_at 갱신
     if recycle_log:
         earned_points = recycle_log.earned_points
         success = recycle_log.earned_points > 0
         message = "포인트 적립 완료" if success else "쓰레기 투입 실패로 포인트 미적립"
-        return {"message": message, "earned_points": earned_points, "success": success}
-    else:
-        return {"message": "포인트 적립 기록 없음", "success": False}
 
+        # last_checked_at을 최신 로그의 timestamp로 업데이트
+        if recycle_log and recycle_log.timestamp:
+            user.last_checked_at = recycle_log.timestamp
+            db.session.commit()
 
+        return {
+            "message": message,
+            "earned_points": earned_points,
+            "success": success,
+            "last_updated": recycle_log.timestamp.isoformat()
+        }
+
+    # 재활용 기록이 없는 경우
+    return {"message": "포인트 적립 기록 없음"}

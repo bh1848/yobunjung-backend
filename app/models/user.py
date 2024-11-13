@@ -1,5 +1,8 @@
+import pytz
 from flask_login import UserMixin
-from app import db  # db를 사용하기 전에 app/__init__.py에서 먼저 초기화되도록 보장
+from sqlalchemy import DateTime
+
+from app import db
 
 
 class User(db.Model, UserMixin):
@@ -9,6 +12,15 @@ class User(db.Model, UserMixin):
     name = db.Column(db.String(80), nullable=False)
     nickname = db.Column(db.String(50), unique=True, nullable=False)
     points = db.Column(db.Integer, default=0)
+    last_checked_at = db.Column(DateTime(timezone=True), default=db.func.now())  # UTC로 저장
+
+    @property
+    def last_checked_kst(self):
+        """last_checked_at을 KST로 변환하여 반환"""
+        if self.last_checked_at is not None:
+            kst = pytz.timezone('Asia/Seoul')
+            return self.last_checked_at.replace(tzinfo=pytz.utc).astimezone(kst)
+        return None
 
     # RecycleLog와의 관계 설정 (back_populates 사용)
     recycle_logs = db.relationship('RecycleLog', back_populates='user')
