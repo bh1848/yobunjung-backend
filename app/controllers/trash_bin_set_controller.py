@@ -21,7 +21,7 @@ def update_status_controller(bin_id):
     return jsonify(response), status_code
 
 
-# 쓰레기통 세트 조회 컨트롤러
+# 쓰레기통 정보 조회 컨트롤러
 def get_trash_bin_set_controller(set_id):
     response, status_code = get_trash_bin_set(set_id)
     return jsonify(response), status_code

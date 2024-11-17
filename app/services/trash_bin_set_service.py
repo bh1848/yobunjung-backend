@@ -42,9 +42,6 @@ def get_trash_bin_set(set_id):
 
     return {
         "set_id": trash_bin_set.id,
-        "name": trash_bin_set.name,
-        "latitude": trash_bin_set.latitude,
-        "longitude": trash_bin_set.longitude,
         "address": trash_bin_set.address,
         "bins": [
             {"trash_type": bin.trash_type, "status": bin.status}  # 'trash_type'으로 수정
