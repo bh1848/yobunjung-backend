@@ -59,9 +59,8 @@ def detect(image):
         return None
 
 
-# QR 코드 생성
 def create_qr_code(trash_type, user_id, logo_path='app/static/logo.png', fill_color="#2795EF", back_color="white"):
-    """QR 코드 생성, 중앙에 로고를 QR 코드 위에 오버레이하여 깔끔하게 삽입."""
+    """QR 코드 생성, 고해상도 지원 및 중앙에 로고 오버레이"""
     try:
         # 기본 유효성 검사
         if not trash_type or not user_id:
@@ -72,8 +71,8 @@ def create_qr_code(trash_type, user_id, logo_path='app/static/logo.png', fill_co
         qr = qrcode.QRCode(
             version=5,  # 데이터 밀도를 높이기 위해 QR 코드 크기 조정
             error_correction=qrcode.constants.ERROR_CORRECT_H,  # 높은 오류 보정률 사용
-            box_size=4,  # 더 작은 점을 위해 박스 크기를 줄임
-            border=4,
+            box_size=10,  # 블록 크기를 높여 해상도 증가
+            border=4,  # 여백 유지
         )
         qr.add_data(qr_data)
         qr.make(fit=True)
@@ -81,16 +80,18 @@ def create_qr_code(trash_type, user_id, logo_path='app/static/logo.png', fill_co
         # QR 코드 이미지 생성 및 색상 설정
         img = qr.make_image(fill_color=fill_color, back_color=back_color).convert("RGB")
 
-        # 로고 이미지 로드 및 흰색 배경을 투명하게 설정
+        # 로고 이미지 로드 및 크기 조정
         logo = Image.open(logo_path).convert("RGBA")
-
-        # 로고 크기 조절
-        logo_size = min(img.size) // 4  # QR 코드 크기의 1/4로 로고 크기 조정
+        logo_size = min(img.size) // 6  # QR 코드 크기의 1/6로 로고 크기 조정
         logo = logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
 
-        # QR 코드 중앙에 로고를 오버레이
+        # QR 코드 중앙에 로고를 배치
         pos = ((img.size[0] - logo_size) // 2, (img.size[1] - logo_size) // 2)
-        img.paste(logo, pos, mask=logo)  # 로고를 QR 코드 중앙에 배치
+        img.paste(logo, pos, mask=logo)
+
+        # 고해상도 출력: 이미지 크기 확대
+        upscale_factor = 2  # 2배 확대
+        img = img.resize((img.size[0] * upscale_factor, img.size[1] * upscale_factor), Image.Resampling.LANCZOS)
 
         # 이미지를 base64로 인코딩
         buffered = io.BytesIO()
