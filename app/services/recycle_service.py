@@ -158,7 +158,6 @@ def get_latest_points_status(user_id):
         if user.last_checked_at and recycle_log and user.last_checked_at >= recycle_log.timestamp:
             return {
                 "message": "아직 쓰레기 투입 안됨",
-                "success": False,
             }
 
         # 변동이 있는 경우, 최신 재활용 로그 정보 반환 및 last_checked_at 갱신
