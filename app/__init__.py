@@ -15,8 +15,7 @@ login_manager = LoginManager()
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
-    CORS(app)
-    CORS(app, resources={r"/recycle/*": {"origins": "*"}})
+    CORS(app, resources={r"/*": {"origins": "*"}})
 
     # 플라스크 애플리케이션에 확장 기능 등록
     db.init_app(app)
