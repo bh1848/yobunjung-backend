@@ -53,7 +53,7 @@ def user_add_points():
 
 
 # SSE 스트림 엔드포인트
-@recycle_bp.route('/<int:user_id>', methods=['GET'])
+@recycle_bp.route('/<int:user_id>/is_successful', methods=['GET'])
 def stream(user_id):
     """SSE 엔드포인트"""
     return stream_sse(user_id)
