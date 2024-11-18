@@ -3,7 +3,7 @@ from app.models.trash_bin import TrashBin
 from app.models.trash_bin_set import TrashBinSet
 
 # 유효한 쓰레기 유형
-VALID_TRASH_TYPES = ["paper", "plastic", "can"]
+VALID_TRASH_TYPES = ["Paper", "Plastic", "Can"]
 
 # 모든 쓰레기통 조회
 def get_all_trash_bins():
