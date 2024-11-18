@@ -3,6 +3,7 @@ from flask_cors import CORS
 from flask_login import LoginManager
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import scoped_session, sessionmaker
 
 from app.services.guide_service import PDFService
 from config import Config
@@ -11,6 +12,7 @@ from config import Config
 db = SQLAlchemy()
 migrate = Migrate()
 login_manager = LoginManager()
+Session = None  # 글로벌 변수로 선언
 
 def create_app():
     app = Flask(__name__)
@@ -36,10 +38,12 @@ def create_app():
     def unauthorized_callback():
         return jsonify({"message": "로그인이 필요합니다."}), 401
 
-    # DB 모델 설정 및 초기화
+    # 애플리케이션 컨텍스트 내에서 Session 초기화
+    global Session
     with app.app_context():
-        from app.models.user import User
+        from app.models.user import User  # 필요한 모델 임포트
         db.create_all()
+        Session = scoped_session(sessionmaker(bind=db.engine))
 
     # 블루프린트 등록
     from app.routes.auth_route import auth_bp
