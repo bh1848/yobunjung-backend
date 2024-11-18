@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from app.controllers.recycle_controller import (
     create_qr_controller,
     detect_controller,
-    add_user_points_controller, check_points_status_controller
+    add_user_points_controller, check_points_status_controller, stream_user_points
 )
 
 recycle_bp = Blueprint('recycle', __name__, url_prefix='/recycle')
@@ -50,3 +50,9 @@ def user_add_points():
 @recycle_bp.route('/<int:user_id>/is_successful', methods=['GET'])
 def check_points_status(user_id):
     return check_points_status_controller(user_id)
+
+
+# 쓰레기 투입됐는지 확인(프론트랑 연동)
+@recycle_bp.route('/stream/<int:user_id>', methods=['GET'])
+def stream(user_id):
+    return stream_user_points(user_id)

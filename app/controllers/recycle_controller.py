@@ -1,10 +1,11 @@
-from flask import request, jsonify
+from flask import request, jsonify, Response, stream_with_context
 
 from app.services.recycle_service import (
     create_qr_code,
     detect,
-    update_user_points, get_latest_points_status
+    update_user_points, get_latest_points_status, get_event_stream
 )
+
 
 # qr 생성
 def create_qr_controller(trash_type, user_id):
@@ -54,3 +55,14 @@ def check_points_status_controller(user_id):
     # 서비스 계층에서 포인트 상태 조회
     result = get_latest_points_status(user_id)
     return jsonify(result), result.get("status_code", 200)
+
+
+# 쓰레기 투입됐는지 확인 SSE(프론트랑 연동)
+def stream_user_points(user_id):
+    """사용자 포인트 적립 상태를 스트리밍"""
+    try:
+        # 서비스 호출
+        event_stream = get_event_stream(user_id)
+        return Response(stream_with_context(event_stream), content_type='text/event-stream')
+    except Exception as e:
+        return {"error": str(e)}, 500
