@@ -11,20 +11,15 @@ from PIL import Image
 from sqlalchemy.event import listen
 from sqlalchemy.exc import SQLAlchemyError
 
-from app import db, Session
+from app import db
 from app.models.recycle_log import RecycleLog
 from app.models.user import User
 from app.models.yolo_model import model
 
+# 연결된 클라이언트 관리
 clients_lock = threading.Lock()
 clients = {}
 
-SQLALCHEMY_ENGINE_OPTIONS = {
-    "pool_size": 10,           # 연결 풀 크기
-    "max_overflow": 20,        # 추가 연결 허용 크기
-    "pool_timeout": 30,        # 대기 시간(초)
-    "pool_recycle": 1800       # 연결 재활용 시간(초)
-}
 
 def get_event_stream(user_id):
     """SSE 이벤트 스트림 제공"""
@@ -36,26 +31,24 @@ def get_event_stream(user_id):
 
     try:
         while True:
+            # 이벤트 대기
             clients[user_id]['event'].wait()
             clients[user_id]['event'].clear()
 
-            session = Session()
-            try:
-                recycle_log = session.query(RecycleLog).filter_by(user_id=user_id).order_by(RecycleLog.timestamp.desc()).first()
-                last_sent_timestamp = clients[user_id]['last_sent_timestamp']
+            recycle_log = RecycleLog.query.filter_by(user_id=user_id).order_by(RecycleLog.timestamp.desc()).first()
 
-                if recycle_log and (last_sent_timestamp is None or recycle_log.timestamp > last_sent_timestamp):
-                    yield f"data: {json.dumps({'message': '포인트가 적립되었습니다.' if recycle_log.is_successful else '포인트가 적립되지 않았습니다.', 'earned_points': recycle_log.earned_points, 'is_successful': recycle_log.is_successful})}\n\n"
+            last_sent_timestamp = clients[user_id]['last_sent_timestamp']
+            if recycle_log and (last_sent_timestamp is None or recycle_log.timestamp > last_sent_timestamp):
+                yield f"data: {json.dumps({'message': '포인트가 적립되었습니다.' if recycle_log.is_successful else '포인트가 적립되지 않았습니다.', 'earned_points': recycle_log.earned_points, 'is_successful': recycle_log.is_successful})}\n\n"
 
-                    with clients_lock:
-                        clients[user_id]['last_sent_timestamp'] = recycle_log.timestamp
-                else:
-                    print(f"[DEBUG] 새로운 데이터 없음: user_id={user_id}, last_sent_timestamp={last_sent_timestamp}, current_timestamp={recycle_log.timestamp if recycle_log else 'No data'}")
-            finally:
-                session.close()
+                with clients_lock:
+                    clients[user_id]['last_sent_timestamp'] = recycle_log.timestamp
+            else:
+                print(f"[DEBUG] 새로운 데이터 없음: user_id={user_id}, last_sent_timestamp={last_sent_timestamp}, current_timestamp={recycle_log.timestamp if recycle_log else 'No data'}")
     except GeneratorExit:
         print(f"SSE 연결 종료: user_id={user_id}")
     finally:
+        # 클라이언트 상태 제거
         with clients_lock:
             if user_id in clients:
                 del clients[user_id]
@@ -68,7 +61,7 @@ def on_recycle_log_insert(_, __, target):
         with clients_lock:
             if target.user_id in clients:
                 print(f"클라이언트 트리거: user_id={target.user_id}")
-                clients[target.user_id]['event'].set()  # 이벤트 트리거
+                clients[target.user_id]['event'].set()  # 해당 클라이언트에 이벤트 발생
     except Exception as e:
         print(f"이벤트 트리거 오류: {e}")
 
