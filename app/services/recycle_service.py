@@ -3,6 +3,7 @@ import io
 import json
 import random
 import threading
+import time
 
 import cv2
 import numpy as np
@@ -16,12 +17,13 @@ from app.models.recycle_log import RecycleLog
 from app.models.user import User
 from app.models.yolo_model import model
 
-# 연결된 클라이언트 관리
+# 클라이언트 관리
 clients_lock = threading.Lock()
 clients = []
 
 
 def get_event_stream(user_id):
+    """SSE 연결 recycle_log에 새로 데이터가 들어오면 반영"""
     event = threading.Event()
     with clients_lock:
         clients.append((user_id, event))
@@ -31,12 +33,24 @@ def get_event_stream(user_id):
             event.wait()
             event.clear()
 
-            recycle_log = RecycleLog.query.filter_by(user_id=user_id).order_by(RecycleLog.timestamp.desc()).first()
+            # 데이터 갱신을 위해 약간의 지연 추가 (DB 반영 시간 확보)
+            time.sleep(0.1)
+
+            # 최신 데이터를 강제로 가져오기
+            recycle_log = (
+                RecycleLog.query.filter_by(user_id=user_id)
+                .order_by(RecycleLog.timestamp.desc())
+                .with_entities(
+                    RecycleLog.is_successful,
+                    RecycleLog.earned_points,
+                )
+                .first()
+            )
+
             if recycle_log:
-                print(f"데이터 전송 준비: {recycle_log}")
-                yield f"data: {json.dumps({'message': '포인트 적립 완료' if recycle_log.is_successful else '쓰레기 투입 실패로 포인트 미적립', 'earned_points': recycle_log.earned_points, 'is_successful': recycle_log.is_successful, 'timestamp': recycle_log.timestamp.isoformat()})}\n\n"
+                yield f"data: {json.dumps({'message': '포인트 적립 완료' if recycle_log.is_successful else '쓰레기 투입 실패로 포인트 미적립', 'earned_points': recycle_log.earned_points, 'is_successful': recycle_log.is_successful})}\n\n"
             else:
-                print("데이터 없음")
+                yield f"data: {json.dumps({'message': '데이터 없음'})}\n\n"
     except GeneratorExit:
         print(f"SSE 연결 종료: user_id={user_id}")
     finally:
