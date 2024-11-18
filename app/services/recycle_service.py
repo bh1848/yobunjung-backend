@@ -8,18 +8,24 @@ import cv2
 import numpy as np
 import qrcode
 from PIL import Image
-from sqlalchemy.event import listen
+from flask import current_app
+from sqlalchemy import event
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import scoped_session, sessionmaker
 
 from app import db
 from app.models.recycle_log import RecycleLog
 from app.models.user import User
 from app.models.yolo_model import model
 
-# 연결된 클라이언트 관리
 clients_lock = threading.Lock()
 clients = {}
 
+def get_session():
+    """Flask 애플리케이션 컨텍스트에서 세션 팩토리 생성"""
+    from app import db
+    session_factory = sessionmaker(bind=db.engine)
+    return scoped_session(session_factory)
 
 def get_event_stream(user_id):
     """SSE 이벤트 스트림 제공"""
@@ -35,16 +41,24 @@ def get_event_stream(user_id):
             clients[user_id]['event'].wait()
             clients[user_id]['event'].clear()
 
-            recycle_log = RecycleLog.query.filter_by(user_id=user_id).order_by(RecycleLog.timestamp.desc()).first()
+            # Flask 컨텍스트에서 세션 생성
+            with current_app.app_context():
+                session = get_session()
+                try:
+                    session.expire_all()  # 캐시 무효화
+                    recycle_log = session.query(RecycleLog).filter_by(user_id=user_id).order_by(RecycleLog.timestamp.desc()).first()
 
-            last_sent_timestamp = clients[user_id]['last_sent_timestamp']
-            if recycle_log and (last_sent_timestamp is None or recycle_log.timestamp > last_sent_timestamp):
-                yield f"data: {json.dumps({'message': '포인트가 적립되었습니다.' if recycle_log.is_successful else '포인트가 적립되지 않았습니다.', 'earned_points': recycle_log.earned_points, 'is_successful': recycle_log.is_successful})}\n\n"
+                    last_sent_timestamp = clients[user_id]['last_sent_timestamp']
+                    if recycle_log and (last_sent_timestamp is None or recycle_log.timestamp > last_sent_timestamp):
+                        # SSE 데이터 생성
+                        yield f"data: {json.dumps({'message': '포인트가 적립되었습니다.' if recycle_log.is_successful else '포인트가 적립되지 않았습니다.', 'earned_points': recycle_log.earned_points, 'is_successful': recycle_log.is_successful})}\n\n"
 
-                with clients_lock:
-                    clients[user_id]['last_sent_timestamp'] = recycle_log.timestamp
-            else:
-                print(f"[DEBUG] 새로운 데이터 없음: user_id={user_id}, last_sent_timestamp={last_sent_timestamp}, current_timestamp={recycle_log.timestamp if recycle_log else 'No data'}")
+                        with clients_lock:
+                            clients[user_id]['last_sent_timestamp'] = recycle_log.timestamp
+                    else:
+                        print(f"[DEBUG] 새로운 데이터 없음: user_id={user_id}, last_sent_timestamp={last_sent_timestamp}, current_timestamp={recycle_log.timestamp if recycle_log else 'No data'}")
+                finally:
+                    session.remove()  # 세션 정리
     except GeneratorExit:
         print(f"SSE 연결 종료: user_id={user_id}")
     finally:
@@ -55,7 +69,8 @@ def get_event_stream(user_id):
                 print(f"클라이언트 제거: user_id={user_id}")
 
 
-def on_recycle_log_insert(_, __, target):
+@event.listens_for(RecycleLog, 'after_insert')
+def on_recycle_log_insert(mapper, connection, target):
     """새로운 로그 삽입 시 이벤트 트리거"""
     try:
         with clients_lock:
@@ -66,8 +81,7 @@ def on_recycle_log_insert(_, __, target):
         print(f"이벤트 트리거 오류: {e}")
 
 
-# SQLAlchemy 이벤트 리스너 등록
-listen(RecycleLog, 'after_insert', on_recycle_log_insert)
+event.listen(RecycleLog, 'after_insert', on_recycle_log_insert)
 
 
 def detect(image):
