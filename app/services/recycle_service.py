@@ -33,16 +33,13 @@ def get_event_stream(user_id):
             event.wait()
             event.clear()
 
-            # 데이터 갱신을 위해 약간의 지연 추가 (DB 반영 시간 확보)
-            time.sleep(0.1)
-
-            # 최신 데이터를 강제로 가져오기
             recycle_log = (
                 RecycleLog.query.filter_by(user_id=user_id)
                 .order_by(RecycleLog.timestamp.desc())
                 .with_entities(
                     RecycleLog.is_successful,
                     RecycleLog.earned_points,
+                    RecycleLog.timestamp,
                 )
                 .first()
             )
@@ -55,10 +52,12 @@ def get_event_stream(user_id):
         print(f"SSE 연결 종료: user_id={user_id}")
     finally:
         with clients_lock:
-            clients.remove((user_id, event))
+            if (user_id, event) in clients:
+                clients.remove((user_id, event))
 
 
 def on_recycle_log_insert(_, __, target):
+    """새로운 RecycleLog가 추가되었을 때 이벤트 트리거"""
     print(f"이벤트 발생: user_id={target.user_id}, earned_points={target.earned_points}")
     try:
         with clients_lock:
