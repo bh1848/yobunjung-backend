@@ -9,7 +9,6 @@ import numpy as np
 import qrcode
 from PIL import Image
 from flask import current_app
-from sqlalchemy import event
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import scoped_session, sessionmaker
 
@@ -21,67 +20,76 @@ from app.models.yolo_model import model
 clients_lock = threading.Lock()
 clients = {}
 
+
 def get_session():
-    """Flask 애플리케이션 컨텍스트에서 세션 팩토리 생성"""
-    from app import db
+    """세션 생성"""
     session_factory = sessionmaker(bind=db.engine)
     return scoped_session(session_factory)
+
+
+def notify_client(user_id):
+    """클라이언트에 알림 이벤트 트리거"""
+    with clients_lock:
+        if user_id in clients:
+            try:
+                clients[user_id]['event'].set()
+                print(f"[DEBUG] Event set for user_id={user_id}")
+            except Exception as e:
+                print(f"[ERROR] Failed to notify client for user_id={user_id}: {e}")
+        else:
+            print(f"[DEBUG] No client registered for user_id={user_id}")
+
 
 def get_event_stream(user_id):
     """SSE 이벤트 스트림 제공"""
     event = threading.Event()
     with clients_lock:
-        if user_id not in clients:
-            clients[user_id] = {'event': event, 'last_sent_timestamp': None}
-            print(f"클라이언트 추가: user_id={user_id}, last_sent_timestamp=None")
+        clients[user_id] = {'event': event}
 
     try:
-        while True:
-            # 이벤트 대기
-            clients[user_id]['event'].wait()
-            clients[user_id]['event'].clear()
+        # 이벤트 발생 대기
+        event.wait()
+        print(f"[DEBUG] Event triggered for user_id={user_id}")
 
-            # Flask 컨텍스트에서 세션 생성
-            with current_app.app_context():
-                session = get_session()
-                try:
-                    session.expire_all()  # 캐시 무효화
-                    recycle_log = session.query(RecycleLog).filter_by(user_id=user_id).order_by(RecycleLog.timestamp.desc()).first()
+        # 최신 데이터 조회
+        with current_app.app_context():
+            session = get_session()
+            try:
+                recycle_log = (
+                    session.query(RecycleLog)
+                    .filter_by(user_id=user_id)
+                    .order_by(RecycleLog.timestamp.desc())
+                    .first()
+                )
+                if recycle_log:
+                    data = {
+                        'user_id': user_id,
+                        'earned_points': recycle_log.earned_points,
+                        'is_successful': recycle_log.is_successful,
+                        'message': (
+                            f"포인트가 적립되었습니다."
+                            if recycle_log.is_successful
+                            else "포인트가 적립되지 않았습니다."
+                        ),
+                    }
+                    print(f"[DEBUG] Sending SSE data: {data}")
+                    yield f"data: {json.dumps(data)}\n\n"
 
-                    last_sent_timestamp = clients[user_id]['last_sent_timestamp']
-                    if recycle_log and (last_sent_timestamp is None or recycle_log.timestamp > last_sent_timestamp):
-                        # SSE 데이터 생성
-                        yield f"data: {json.dumps({'message': '포인트가 적립되었습니다.' if recycle_log.is_successful else '포인트가 적립되지 않았습니다.', 'earned_points': recycle_log.earned_points, 'is_successful': recycle_log.is_successful})}\n\n"
-
-                        with clients_lock:
-                            clients[user_id]['last_sent_timestamp'] = recycle_log.timestamp
-                    else:
-                        print(f"[DEBUG] 새로운 데이터 없음: user_id={user_id}, last_sent_timestamp={last_sent_timestamp}, current_timestamp={recycle_log.timestamp if recycle_log else 'No data'}")
-                finally:
-                    session.remove()  # 세션 정리
+                    # 연결 종료 이벤트 추가
+                    yield "event: close\ndata: Connection closed\n\n"
+                else:
+                    print(f"[ERROR] No recycle log found for user_id={user_id}")
+            except Exception as e:
+                print(f"[ERROR] Database error: {e}")
+                yield f"data: {json.dumps({'error': 'Database error'})}\n\n"
+            finally:
+                session.remove()
     except GeneratorExit:
-        print(f"SSE 연결 종료: user_id={user_id}")
+        print(f"[DEBUG] SSE connection closed for user_id={user_id}")
     finally:
-        # 클라이언트 상태 제거
         with clients_lock:
-            if user_id in clients:
-                del clients[user_id]
-                print(f"클라이언트 제거: user_id={user_id}")
-
-
-@event.listens_for(RecycleLog, 'after_insert')
-def on_recycle_log_insert(mapper, connection, target):
-    """새로운 로그 삽입 시 이벤트 트리거"""
-    try:
-        with clients_lock:
-            if target.user_id in clients:
-                print(f"클라이언트 트리거: user_id={target.user_id}")
-                clients[target.user_id]['event'].set()  # 해당 클라이언트에 이벤트 발생
-    except Exception as e:
-        print(f"이벤트 트리거 오류: {e}")
-
-
-event.listen(RecycleLog, 'after_insert', on_recycle_log_insert)
+            del clients[user_id]
+            print(f"[DEBUG] Client removed for user_id={user_id}")
 
 
 def detect(image):
@@ -165,6 +173,9 @@ def update_user_points(user_id, trash_type, trash_boolean, points=None):
 
         db.session.add(recycle_log)
         db.session.commit()
+
+        # SSE 이벤트 트리거
+        notify_client(user_id)
 
         if trash_boolean:
             success_message = f"{points_to_add} 포인트가 적립되었습니다."
