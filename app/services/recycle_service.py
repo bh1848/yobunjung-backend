@@ -3,7 +3,6 @@ import io
 import json
 import random
 import threading
-import time
 
 import cv2
 import numpy as np
@@ -17,54 +16,55 @@ from app.models.recycle_log import RecycleLog
 from app.models.user import User
 from app.models.yolo_model import model
 
-# 클라이언트 관리
+# 연결된 클라이언트 관리
 clients_lock = threading.Lock()
-clients = []
+clients = {}
 
 
 def get_event_stream(user_id):
-    """SSE 연결 recycle_log에 새로 데이터가 들어오면 반영"""
+    """SSE 이벤트 스트림 제공"""
+    # 클라이언트 상태 초기화
     event = threading.Event()
     with clients_lock:
-        clients.append((user_id, event))
+        if user_id not in clients:
+            # 클라이언트 초기화
+            clients[user_id] = {'event': event, 'last_sent_timestamp': None}
+            print(f"클라이언트 추가: user_id={user_id}, last_sent_timestamp=None")
 
     try:
         while True:
-            event.wait()
-            event.clear()
+            # 이벤트 대기
+            clients[user_id]['event'].wait()
+            clients[user_id]['event'].clear()
 
-            recycle_log = (
-                RecycleLog.query.filter_by(user_id=user_id)
-                .order_by(RecycleLog.timestamp.desc())
-                .with_entities(
-                    RecycleLog.is_successful,
-                    RecycleLog.earned_points,
-                    RecycleLog.timestamp,
-                )
-                .first()
-            )
+            recycle_log = RecycleLog.query.filter_by(user_id=user_id).order_by(RecycleLog.timestamp.desc()).first()
 
-            if recycle_log:
-                yield f"data: {json.dumps({'message': '포인트 적립 완료' if recycle_log.is_successful else '쓰레기 투입 실패로 포인트 미적립', 'earned_points': recycle_log.earned_points, 'is_successful': recycle_log.is_successful})}\n\n"
+            last_sent_timestamp = clients[user_id]['last_sent_timestamp']
+            if recycle_log and (last_sent_timestamp is None or recycle_log.timestamp > last_sent_timestamp):
+                yield f"data: {json.dumps({'message': '포인트가 적립되었습니다.' if recycle_log.is_successful else '포인트가 적립되지 않았습니다.', 'earned_points': recycle_log.earned_points, 'is_successful': recycle_log.is_successful})}\n\n"
+
+                # 데이터 전송 후 타임스탬프 갱신
+                with clients_lock:
+                    clients[user_id]['last_sent_timestamp'] = recycle_log.timestamp
             else:
-                yield f"data: {json.dumps({'message': '데이터 없음'})}\n\n"
+                print(f"[DEBUG] 새로운 데이터 없음: user_id={user_id}, last_sent_timestamp={last_sent_timestamp}, current_timestamp={recycle_log.timestamp if recycle_log else 'No data'}")
     except GeneratorExit:
         print(f"SSE 연결 종료: user_id={user_id}")
     finally:
+        # 클라이언트 상태 제거
         with clients_lock:
-            if (user_id, event) in clients:
-                clients.remove((user_id, event))
+            if user_id in clients:
+                del clients[user_id]
+                print(f"클라이언트 제거: user_id={user_id}")
 
 
 def on_recycle_log_insert(_, __, target):
-    """새로운 RecycleLog가 추가되었을 때 이벤트 트리거"""
-    print(f"이벤트 발생: user_id={target.user_id}, earned_points={target.earned_points}")
+    """새로운 로그 삽입 시 이벤트 트리거"""
     try:
         with clients_lock:
-            for client_user_id, event in clients:
-                if client_user_id == target.user_id:
-                    print(f"클라이언트 트리거: user_id={client_user_id}")
-                    event.set()
+            if target.user_id in clients:
+                print(f"클라이언트 트리거: user_id={target.user_id}")
+                clients[target.user_id]['event'].set()  # 해당 클라이언트에 이벤트 발생
     except Exception as e:
         print(f"이벤트 트리거 오류: {e}")
 
