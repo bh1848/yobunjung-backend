@@ -3,9 +3,11 @@ import io
 import json
 import random
 import threading
+import os
 
 import cv2
 import numpy as np
+import onnxruntime as ort
 import qrcode
 from PIL import Image
 from flask import current_app
@@ -15,10 +17,27 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from app import db
 from app.models.recycle_log import RecycleLog
 from app.models.user import User
-from app.models.yolo_model import model
 
 clients_lock = threading.Lock()
 clients = {}
+
+
+model_path = 'app/models/best.onnx'
+
+try:
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"모델 파일을 찾을 수 없습니다: {model_path}")
+
+    session = ort.InferenceSession(model_path)
+    print(f"[INFO] ONNX 모델이 성공적으로 로드되었습니다: {model_path}")
+except FileNotFoundError as fnf_error:
+    print(f"[ERROR] {fnf_error}")
+except Exception as e:
+    print(f"[ERROR] ONNX 모델 로드 실패: {e}")
+    raise
+
+# 클래스 이름 매핑
+class_names = {0: 'Can', 1: 'Plastic', 2: 'Paper'}
 
 
 def get_session():
@@ -92,28 +111,58 @@ def get_event_stream(user_id):
             print(f"[DEBUG] Client removed for user_id={user_id}")
 
 
-def detect(image):
-    """ONNX 모델로 물체를 분류하고 해당 분류를 반환합니다."""
+def detect_objects(image):
+    """
+    ONNX 모델을 사용해 입력 이미지를 감지합니다.
+    - 입력: OpenCV 이미지
+    - 출력: 감지된 물체 정보 (가장 높은 confidence 기준)
+    """
     try:
-        image_np = np.frombuffer(image.read(), np.uint8)
-        frame = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
-        input_image = cv2.resize(frame, (640, 640))
-        input_image = input_image.transpose(2, 0, 1)
-        input_image = input_image[np.newaxis, :, :, :].astype(np.float32) / 255.0
+        # 모델 입력 이름 및 크기 가져오기
+        input_name = session.get_inputs()[0].name
+        input_shape = session.get_inputs()[0].shape  # [batch_size, channels, height, width]
 
-        outputs = model.run(None, {'images': input_image})
-        print("ONNX 모델 추론 결과 구조:", outputs)
+        # 이미지 전처리
+        input_image = cv2.resize(image, (input_shape[2], input_shape[3]))  # 크기 조정
+        input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)  # 색 공간 변환
+        input_image = input_image.transpose(2, 0, 1)  # HWC -> CHW
+        input_image = np.expand_dims(input_image, axis=0).astype(np.float32) / 255.0  # 정규화 및 배치 추가
 
-        trash_type = None
-        for prediction in outputs[0][0]:
-            class_probs = prediction[-3:]
-            label = int(np.argmax(class_probs))
-            trash_type = {0: 'Can', 1: 'Plastic', 2: 'Paper'}.get(label, 'Unknown')
-            break
+        # 모델 추론
+        outputs = session.run(None, {input_name: input_image})
 
-        return trash_type
+        # 감지 결과 처리
+        detections = []
+        output_data = outputs[0][0]  # 2차원 배열로 가정
+        for detection in output_data:  # 각 감지 결과를 순회
+            if len(detection) < 5:
+                print(f"[WARN] 예상치 못한 출력 형식: {detection}")
+                continue
+
+            # 바운딩 박스와 클래스 확률 추출
+            x1, y1, x2, y2, confidence = detection[:5]
+            class_probs = detection[5:]
+            label = int(np.argmax(class_probs))  # 가장 높은 확률의 클래스
+            trash_type = class_names.get(label, 'Unknown')
+
+            if confidence > 0.5:  # 신뢰도 임계값
+                detections.append({
+                    "trash_type": trash_type,
+                    "confidence": float(confidence),
+                    "box": [int(x1), int(y1), int(x2), int(y2)]
+                })
+
+        # 가장 높은 confidence 값 선택
+        if detections:
+            best_detection = max(detections, key=lambda x: x['confidence'])
+            print(f"[DEBUG] 선택된 감지 결과: {best_detection}")
+            return best_detection['trash_type']
+        else:
+            print("[DEBUG] 감지 결과가 없습니다.")
+            return None
+
     except Exception as e:
-        print(f"물체 분류 오류 발생: {e}")
+        print(f"[ERROR] ONNX 감지 오류 발생: {e}")
         return None
 
 

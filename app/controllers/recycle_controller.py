@@ -1,9 +1,10 @@
+import cv2
+import numpy as np
 from flask import request, jsonify, Response, stream_with_context
 
 from app.services.recycle_service import (
     create_qr_code,
-    detect,
-    update_user_points, get_event_stream
+    update_user_points, get_event_stream, detect_objects
 )
 
 
@@ -16,12 +17,27 @@ def create_qr_controller(trash_type, user_id):
 
 
 # 쓰레기 사진 인식
-def detect_controller(image):
-    """이미지에서 물체를 분류하고 결과를 반환합니다."""
-    trash_type = detect(image)
-    if not trash_type:
-        raise ValueError("물체 분류 실패")
-    return trash_type
+def handle_detection():
+    """
+    업로드된 이미지를 처리하고 결과를 반환합니다.
+    """
+    if 'image' not in request.files:
+        return jsonify({"error": "이미지가 업로드되지 않았습니다."}), 400
+
+    file = request.files['image']
+    try:
+        # 이미지 읽기
+        image_np = np.frombuffer(file.read(), np.uint8)
+        image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
+
+        # 감지 실행
+        detections = detect_objects(image)
+
+        # 결과 반환
+        return jsonify({"trash_type": detections}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"감지 오류: {str(e)}"}), 500
 
 
 # 포인트 적립
@@ -44,17 +60,6 @@ def add_user_points_controller():
         return jsonify({"error": str(e)}), 404  # 사용자 없음
     except Exception as e:
         return jsonify({"error": "포인트 적립 중 오류 발생"}), 500  # 기타 오류
-
-
-# # 쓰레기 투입됐는지 확인
-# def check_points_status_controller(user_id):
-#     """사용자의 최신 포인트 적립 상태를 조회하는 컨트롤러"""
-#     if not user_id:
-#         return jsonify({"error": "user_id를 제공해야 합니다."}), 400
-#
-#     # 서비스 계층에서 포인트 상태 조회
-#     result = get_latest_points_status(user_id)
-#     return jsonify(result), result.get("status_code", 200)
 
 
 # 쓰레기 투입됐는지 확인 SSE(프론트랑 연동)

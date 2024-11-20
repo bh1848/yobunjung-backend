@@ -1,8 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.controllers.recycle_controller import (
     create_qr_controller,
-    detect_controller,
-    add_user_points_controller, stream_sse
+    add_user_points_controller, stream_sse, handle_detection
 )
 
 recycle_bp = Blueprint('recycle', __name__, url_prefix='/recycle')
@@ -26,30 +25,14 @@ def create_qr():
 
 # 쓰레기사진인식
 @recycle_bp.route('/detect', methods=['POST'])
-def detect():
-    if 'image' not in request.files:
-        return jsonify({"error": "이미지 파일이 필요합니다."}), 400
-
-    image = request.files['image']
-    try:
-        trash_type = detect_controller(image)
-        return jsonify({"trash_type": trash_type}), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        return jsonify({"error": "물체 분류 중 오류 발생"}), 500
+def detect_route():
+    return handle_detection()
 
 
 # 포인트 적립 엔드포인트
 @recycle_bp.route('/add_points', methods=['POST'])
 def user_add_points():
     return add_user_points_controller()
-
-
-# # 쓰레기 투입됐는지 확인
-# @recycle_bp.route('/<int:user_id>/is_successful', methods=['GET'])
-# def check_points_status(user_id):
-#     return check_points_status_controller(user_id)
 
 
 # SSE 스트림 엔드포인트
