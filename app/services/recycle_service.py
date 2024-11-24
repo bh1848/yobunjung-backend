@@ -4,6 +4,7 @@ import json
 import random
 import threading
 import os
+import time
 
 import cv2
 import numpy as np
@@ -65,15 +66,28 @@ def get_event_stream(user_id):
     with clients_lock:
         # 기존 연결 초기화
         if user_id in clients:
-            clients[user_id]['event'].set()
+            clients[user_id]['event'].set()  # 기존 이벤트 설정
             del clients[user_id]
-        clients[user_id] = {'event': event}
+        clients[user_id] = {'event': event, 'last_ping': time.time()}
 
     try:
         while True:
-            event.wait()  # 이벤트 발생 대기
+            # 이벤트 발생 대기
+            event.wait(timeout=10)  # 10초 대기 (Ping 요청과 연결)
             event.clear()  # 다음 이벤트를 위해 초기화
 
+            # 클라이언트 Ping 응답 확인
+            with clients_lock:
+                if user_id in clients:
+                    # Ping 타임아웃 확인
+                    if time.time() - clients[user_id]['last_ping'] > 30:  # 30초 이상 응답 없음
+                        print(f"[DEBUG] SSE 연결 타임아웃: user_id={user_id}")
+                        break  # 연결 종료
+                else:
+                    print(f"[DEBUG] 클라이언트가 제거됨: user_id={user_id}")
+                    break
+
+            # 이벤트 데이터 전송
             with current_app.app_context():
                 session = get_session()
                 try:
@@ -102,10 +116,11 @@ def get_event_stream(user_id):
     except GeneratorExit:
         print(f"[DEBUG] SSE connection closed for user_id={user_id}")
     finally:
+        # 연결 종료 시 클라이언트 제거
         with clients_lock:
             if user_id in clients:
                 del clients[user_id]
-            print(f"[DEBUG] Client removed for user_id={user_id}")
+            print(f"[DEBUG] 클라이언트가 제거됨: user_id={user_id}")
 
 
 def detect_objects(image):
