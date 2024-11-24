@@ -63,51 +63,48 @@ def get_event_stream(user_id):
     """SSE 이벤트 스트림 제공"""
     event = threading.Event()
     with clients_lock:
+        # 기존 연결 초기화
+        if user_id in clients:
+            clients[user_id]['event'].set()
+            del clients[user_id]
         clients[user_id] = {'event': event}
 
     try:
-        # 이벤트 발생 대기
-        event.wait()
-        print(f"[DEBUG] Event triggered for user_id={user_id}")
+        while True:
+            event.wait()  # 이벤트 발생 대기
+            event.clear()  # 다음 이벤트를 위해 초기화
 
-        # 최신 데이터 조회
-        with current_app.app_context():
-            session = get_session()
-            try:
-                recycle_log = (
-                    session.query(RecycleLog)
-                    .filter_by(user_id=user_id)
-                    .order_by(RecycleLog.timestamp.desc())
-                    .first()
-                )
-                if recycle_log:
-                    data = {
-                        'user_id': user_id,
-                        'earned_points': recycle_log.earned_points,
-                        'is_successful': recycle_log.is_successful,
-                        'message': (
-                            f"포인트가 적립되었습니다."
-                            if recycle_log.is_successful
-                            else "포인트가 적립되지 않았습니다."
-                        ),
-                    }
-                    print(f"[DEBUG] Sending SSE data: {data}")
-                    yield f"data: {json.dumps(data)}\n\n"
-
-                    # 연결 종료 이벤트 추가
-                    yield "event: close\ndata: Connection closed\n\n"
-                else:
-                    print(f"[ERROR] No recycle log found for user_id={user_id}")
-            except Exception as e:
-                print(f"[ERROR] Database error: {e}")
-                yield f"data: {json.dumps({'error': 'Database error'})}\n\n"
-            finally:
-                session.remove()
+            with current_app.app_context():
+                session = get_session()
+                try:
+                    recycle_log = (
+                        session.query(RecycleLog)
+                        .filter_by(user_id=user_id)
+                        .order_by(RecycleLog.timestamp.desc())
+                        .first()
+                    )
+                    if recycle_log:
+                        data = {
+                            'user_id': user_id,
+                            'earned_points': recycle_log.earned_points,
+                            'is_successful': recycle_log.is_successful,
+                            'message': (
+                                f"포인트가 적립되었습니다."
+                                if recycle_log.is_successful
+                                else "포인트가 적립되지 않았습니다."
+                            ),
+                        }
+                        yield f"data: {json.dumps(data)}\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                finally:
+                    session.remove()
     except GeneratorExit:
         print(f"[DEBUG] SSE connection closed for user_id={user_id}")
     finally:
         with clients_lock:
-            del clients[user_id]
+            if user_id in clients:
+                del clients[user_id]
             print(f"[DEBUG] Client removed for user_id={user_id}")
 
 
